@@ -1,0 +1,404 @@
+<!--
+
+  Hi Friends!
+
+  Again, This is another project with a really crappy code base
+  because of tight time constraints. I would suggest avoiding it
+  at all costs. 
+
+  That being said, there are a few cool files that are usuable
+  to one degree or another. Specifcally the GPGPU ( by @mrdoob )
+  and the TextCreator.js , and AudioTexture.js seem pretty fun.
+
+
+  Thanks to:
+  @Rioux__
+  @mrdoob
+  @RezaAli / @EddieTree for the Curl Noise
+  @BlurSpine for general graphics inspiration
+  @thespite for general graphics inspiration
+
+  and YOU! for reading this source :)
+
+  Let me know if you have any question / comments 
+  ( Aside from saying the code is ugly. I already know it is. )
+  
+  
+  @Cabbibo
+
+
+-->
+
+<html>
+
+  <head>
+    <link rel="stylesheet" type="text/css" href="lib/main.css">
+
+    <link href="favicon.ico" rel="icon" type="image/x-icon" >
+    
+  </head>
+
+  <body>
+
+    
+<script src="lib/three.js"></script>
+<script src="lib/jquery.min.js"></script>
+<script src="lib/stats.min.js"></script>
+<script src="lib/underscore.js"></script>
+<script src="lib/leap.js"></script>
+
+<script src="lib/TrackballControls.js"></script>
+<script src="lib/MouseMoveControls.js"></script>
+
+<script src="lib/OBJLoader.js" ></script>
+
+<script src="lib/Loader.js"></script>
+<script src="lib/GPGPU.js"></script>
+
+<script src="src/GeoPosTexture.js"></script>
+<script src="src/PhysicsRenderer.js"></script>
+
+<script src="lib/TextCreator.js"></script>
+<script src="lib/AudioController.js"></script>
+<script src="lib/AudioTexture.js"></script>
+<script src="lib/Stream.js"></script>
+
+<script src="lib/Math.js"></script>
+
+
+
+<!-- 
+s is for shaders. Sorry about the terse folder name,
+but short lines are of paramoun importance to me ;)
+-->
+
+<script id="fs-simulation" type="frag" data-src="s/fs-simulation.js"></script>
+<script id="vs-render" type="vert" data-src="s/vs-render.js"></script>
+<script id="fs-render" type="frag" data-src="s/fs-render.js"></script>
+
+  <script>
+
+      // HOW MANY PARTICLES
+      var size = 512;
+
+
+      var camera, renderer, scene , controls ,stats;
+
+      var loader
+      // Uniforms for our simulation;
+      var lifetime, fingers , toGeo ;
+
+      // Array to keep track of fingerJoints
+      var fingerJoints = [];
+
+      // Uniforms for the render
+      var sprite; 
+
+      // Our Simulation Renderer
+      var physicsRenderer;
+
+      var controller;
+
+
+      var vs, fs;
+
+      var vs = {};
+      var fs = {};
+
+      var loader = new Loader();
+
+      var audioController = new AudioController();
+     
+      var vsShaders       = $('script[type="vert"]');
+      var fsShaders     = $('script[type="frag"]');
+
+      loadShader( 'simulation',   fsShaders[0] , 'fragment' );
+      loadShader( 'render',       vsShaders[0] , 'vertex' );
+      loadShader( 'render',       fsShaders[1] , 'fragment' );
+
+      var mainMaterial =  new THREE.MeshBasicMaterial({
+        color:0x000000,
+        side:THREE.DoubleSide
+      });
+
+      // We have to include the THREE.OBJLoader if we want to load OBJs..
+      loader.OBJLoader.load( 'models/cabbibo1.obj' , function( object ){
+        object.traverse( function ( child ) {
+            if ( child instanceof THREE.Mesh ) {
+              var geo = new THREE.Geometry();
+              var mesh = new THREE.Mesh( child.geometry , mainMaterial );
+              mesh.scale.multiplyScalar( 100 );
+              THREE.GeometryUtils.merge( geo , mesh );
+              geo.computeVertexNormals();
+              logoGeo = geo;       
+            }
+        });
+        loader.loadBarAdd();
+      });
+
+
+
+      
+      function init(){
+
+        controller = new Leap.Controller();
+        controller.connect();
+        var w = window.innerWidth;
+        var h = window.innerHeight;
+
+        camera = new THREE.PerspectiveCamera( 65 , w/h , 1 , 30000 );
+        camera.position.z = 4000;
+
+        controls = new THREE.TrackballControls( camera );
+        controls.rotateSpeed = 1;
+        controls.minDistance = 50;
+        controls.maxDistance = 10000;
+        controls.dynamicDampingFactor = .1;
+        controls.noPan = true;
+
+
+
+
+        scene = new THREE.Scene();
+
+        renderer = new THREE.WebGLRenderer();
+        renderer.setSize( window.innerWidth, window.innerHeight );
+
+
+        physicsRenderer = new PhysicsRenderer( size , fs.simulation , renderer  );
+
+        var logoTexCreator = new GeoPosTexture( logoGeo );
+        logoTexture = logoTexCreator.createRandomEdgeTexture( size );
+
+        var mesh = new THREE.Mesh(
+          logoGeo,
+          new THREE.MeshBasicMaterial({color:0x000000})
+        );
+        scene.add( mesh );
+
+
+
+        var geo = new THREE.IcosahedronGeometry( 50 , 1 );
+
+        var sphereTexCreator = new GeoPosTexture( geo );
+
+        var mat = new THREE.MeshBasicMaterial({color:0x000000})
+
+        for( var i = 0; i < 20; i++ ){
+
+          var mesh = new THREE.Mesh( geo , mat );
+          scene.add( mesh );
+          fingerJoints.push( mesh );
+
+        } 
+
+        var t = sphereTexCreator.createRandomEdgeTexture( size );
+
+        physicsRenderer.reset( t );
+
+        lifetime = { type:"f", value:100 };
+        joints = { type:"t",value:null};
+        oJoints = { type:"t" , value: null };
+        jointShape = { type:"t" , value: t };
+        toGeo = { type:"t" , value: logoTexture };
+
+
+        physicsRenderer.assignSimulationUniform( 'lifetime' , lifetime );
+        physicsRenderer.assignSimulationUniform( 'joints' , joints );
+        physicsRenderer.assignSimulationUniform( 'oJoints' , oJoints );
+        physicsRenderer.assignSimulationUniform( 'jointShape' , jointShape );
+        physicsRenderer.assignSimulationUniform( 'toGeo' , toGeo );
+        
+        
+       // physicsRenderer.addDebugScene( scene );
+
+        var geo = new THREE.BufferGeometry();
+
+        geo.addAttribute( 'position', Float32Array , size*size , 3 );
+ 
+        var positions = geo.attributes.position.array;
+
+        for ( var i = 0, j = 0, l = positions.length / 3; i < l; i ++, j += 3 ) {
+
+          positions[ j     ] = ( i % this.size ) / this.size;
+          positions[ j + 1 ] = Math.floor( i / this.size ) / this.size;
+          positions[ j + 2 ] = i;
+
+        }
+
+        sprite = THREE.ImageUtils.loadTexture( 'img/lensFlare.png' );
+        var uniforms = {
+          t_pos:{type:"t",value:physicsRenderer.output},
+          t_oPos:{type:"t",value:physicsRenderer.oOutput},
+          t_ooPpos:{type:"t",value:physicsRenderer.ooOutput},
+          size:{type:"f",value:size},
+          sprite:{type:"t",value:sprite}
+        }
+
+        var mat = new THREE.ShaderMaterial({
+
+          uniforms: uniforms,
+          vertexShader: vs.render,
+          fragmentShader: fs.render,
+          transparent:true,
+          blending:THREE.AdditiveBlending,
+          depthWrite:false
+            
+        });
+
+        particles = new THREE.ParticleSystem( geo , mat );
+        scene.add( particles );        
+
+        stats = new Stats();
+        stats.domElement.id = "stats";
+        //document.body.appendChild( stats.domElement );
+
+        var object = new THREE.Mesh( 
+          logoGeo,
+          new THREE.MeshNormalMaterial()
+        );
+
+
+
+
+        document.body.appendChild( renderer.domElement );
+        window.addEventListener( 'resize', onResize , false );
+        
+
+        loader.liftCurtain();
+        animate();
+
+      }
+
+      function animate(){
+
+
+        requestAnimationFrame( animate );
+
+        var u = physicsRenderer.simulation.uniforms
+        var j = u.joints.value;
+        u.oJoints.value = j ;
+        u.joints.value =  updateLeapTexture();
+
+        
+        physicsRenderer.update();
+        stats.update();
+        audioController.update();
+        controls.update();
+        renderer.render( scene , camera );
+      }
+
+      function onResize() {
+        windowHalfX = window.innerWidth / 2;
+        windowHalfY = window.innerHeight / 2;
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      function loadShader( title , shader, type) {
+
+        loader.addToLoadBar();
+      
+        // wrap up the shader for convenience
+        var $shader = $(shader);
+        
+        // request the file over AJAX
+        $.ajax({
+            url: $shader.data('src'),
+            dataType: 'text',
+            context: {
+                name: $shader.data('name'),
+                type: type
+            },
+            complete: function(r){
+              loader.loadBarAdd();
+              if( type == 'vertex' ){
+                vs[title] = r.responseText;
+              }else{
+                fs[title] = r.responseText;
+              }
+
+            }
+        });
+        
+      }
+    
+
+      function leapToScene( position , frame , size ){
+
+        var x = position[0] - frame.interactionBox.center[0];
+        var y = position[1] - frame.interactionBox.center[1];
+        var z = position[2] - frame.interactionBox.center[2];
+          
+        x /= frame.interactionBox.size[0];
+        y /= frame.interactionBox.size[1];
+        z /= frame.interactionBox.size[2];
+
+        x *= size;
+        y *= size;
+        z *= size;
+
+        return new THREE.Vector3( x , y , z );
+
+      }
+
+      function updateLeapTexture(){
+
+        var f = controller.frame();
+ 
+        var data = new Float32Array( 20 * 4 );
+
+        for( var i = 0; i < data.length; i += 4 ){
+
+          var index = Math.floor( i/4 );
+          var point = new THREE.Vector3()
+          if( f.hands[0] ){
+
+            var fIndex = Math.floor( index / 4 );
+            var jIndex = index % 4;
+            var joint = f.hands[0].fingers[fIndex].positions[jIndex];
+            point = leapToScene( joint , f , 1000 );
+
+          }else{
+
+            var p =  fingerJoints[index].position;
+            point = p.clone().sub( p.clone().multiplyScalar( .05 ));
+
+
+          }
+
+          fingerJoints[index].position = point;
+
+          data[ i     ] = point.x;
+          data[ i + 1 ] = point.y;
+          data[ i + 2 ] = point.z;
+          data[ i + 3 ] = index;  // Saving ID as alpha!
+
+        }
+
+        var texture = new THREE.DataTexture(
+          data,
+          20,
+          1,
+          THREE.RGBAFormat,
+          THREE.FloatType 
+        );
+
+
+        // Setting up the Texture, so that there is NO
+        // distortion, and it is just a straight texture
+        // to be sampled from
+        texture.minFilter = THREE.NearestFilter;
+        texture.magFilter = THREE.NearestFilter;
+        texture.generateMipmaps = false;
+        texture.needsUpdate = true;
+
+        return texture;
+       
+
+      }
+    </script>
+
+  </body>
+</html>

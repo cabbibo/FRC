@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<title>Sporel</title>
+		<style>
+			html {
+				height: 100%;
+			}
+			body {
+				width: 100%;
+				height: 100%;
+
+				margin: 0;
+				padding: 0;
+
+				color: #fff;
+
+				font-size: 24px;
+				font-family: Serif;
+				font-style: italic;
+
+				background-color: #000;
+
+				overflow: hidden;
+
+			}				
+  
+          </style>
+	</head>
+	<body>
+
+      <script src="three.min.js"></script>
+      <script src="Wagner/Wagner.js"></script>
+      <script src="LeapTrackballControls.js"></script>
+      <script src="leap.js"></script>
+      <!--<script src="//js.leapmotion.com/0.3.0/leap.min.js"></script>-->
+      
+      
+		<script src="FBOUtils.js"></script>
+
+		<script src="Audio.js"></script>
+
+		<script id="vs-simulation" type="x-shader/x-vertex">
+				
+			varying vec2 vUv;
+
+			void main() {
+
+				vUv =vec2(uv.x, 1.0 - uv.y);
+				gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+			}
+
+		</script>
+		<script id="fs-simulation" type="x-shader/x-fragment">
+							
+            uniform float innerRadius;
+            uniform float outerRadius;
+            
+
+            uniform vec3 fingerPos;
+
+            uniform sampler2D tPositions;
+			uniform sampler2D tOrigins;
+            
+            varying vec2 vUv;
+
+            void main( void )
+            {
+                
+              vec3 vO = texture2D( tOrigins   , vUv ).rgb; // Original position
+              vec3 v  = texture2D( tPositions , vUv ).rgb; // current position
+             
+              vec3  d = vO - v;
+              float l = length( d );
+              vec3  n = normalize( d );
+
+              vec3  dF = v - fingerPos;
+              vec3  nF = normalize( dF );
+              float lF = length( dF );
+
+              vec3 f = vec3( 0.0 , 0.0 , 0.0 );
+              
+              if( lF > outerRadius ){
+                f = d;
+              }
+
+
+              if( lF <= outerRadius && lF >= innerRadius ){
+                f = ( outerRadius - lF ) * nF; 
+              }
+              
+              if( lF < innerRadius ){
+                f = -( lF * nF );
+              }
+
+              //gl_FragColor = vec4( vO , 1.0 );
+              gl_FragColor = vec4 ( v + (f / 10.0) ,  1.0);
+            //gl_FragColor = vec4 ( fingerPos ,  1.0);
+
+            //gl_FragColor = vec4(0.0);
+
+          }
+
+
+
+
+		</script>
+
+		<!-- zz85 - end simulations -->
+
+		<script id="vs-particles" type="x-shader/x-vertex">
+
+			uniform sampler2D map;
+
+			uniform float width;
+			uniform float height;
+
+			varying vec2 vUv;
+			varying vec3 vPosition;
+			varying float opacity;
+
+			void main() {
+
+				vec2 uv = position.xy + vec2( 0.5 / width, 0.5 / height );
+
+				vec4 data = texture2D( map, uv );
+
+				vPosition = data.xyz;
+				opacity = data.w;
+
+                gl_PointSize = 1.0; // data.w * 10.0 + 1.0;
+                
+                vec3 pos = vPosition;
+                //vec3 pos = position;
+
+				gl_Position = projectionMatrix * modelViewMatrix * vec4( pos, 1.0 );
+
+			}
+
+		</script>
+
+		<script id="fs-particles" type="x-shader/x-fragment">
+
+			uniform vec3 pointColor;
+
+			varying vec3 vPosition;
+			varying float opacity;
+
+			void main() {
+
+				//if ( opacity <= 0.0 ) discard;
+				gl_FragColor = vec4( pointColor , opacity );
+
+			}
+
+		</script>
+
+		<script>
+
+			var audio;
+
+			var scene, camera, renderer;
+			var particleMaterial;
+
+			var fboParticles, rtTexturePos, rtTexturePos2, simulationShader;
+
+            var mesh;
+
+            var controller, frame;
+            init();
+
+			function init() {
+
+              renderer = new THREE.WebGLRenderer();
+              renderer.setSize( window.innerWidth, window.innerHeight );
+              document.body.appendChild( renderer.domElement );
+
+              camera = new THREE.PerspectiveCamera( 50, window.innerWidth / window.innerHeight, 1, 5000 );
+              camera.position.z = 150;
+
+
+              var controller = new Leap.Controller();
+            controller.on( 'frame' , function( f ){
+
+              frame = f;
+
+            });
+
+            controller.connect();
+            controls = new THREE.LeapTrackballControls( camera , controller );
+            controls.minZoom = 100;
+            controls.maxZoom = 200;
+              scene = new THREE.Scene();
+
+              
+              var width = 512, height = 512;
+
+              //var data = new Float32Array( width * height * 4 );
+      
+
+              //var geometry = new THREE.IcosahedronGeometry( 100 , 2);
+              var geometry = new THREE.CubeGeometry( 100, 100 , 100 );
+              //var geometry = new THREE.SphereGeometry( 100 , 10 , 10 );
+              //var geometry = new THREE.PlaneGeometry( 100 , 100 , 100 , 100);
+
+
+              var data = new Float32Array( width * height * 3 );
+
+              var point = new THREE.Vector3();
+              var facesLength = geometry.faces.length;
+
+
+              for ( var i = 0, l = data.length; i < l; i += 4 ) {
+
+                  var face = geometry.faces[ Math.floor( Math.random() * facesLength ) ];
+
+                  var vertex1 = geometry.vertices[ face.a ];
+                  var vertex2 = geometry.vertices[ Math.random() > 0.5 ? face.b : face.c ];
+
+                  point.subVectors( vertex2, vertex1 );
+                  point.multiplyScalar( Math.random() );
+                  point.add( vertex1 );
+
+                  data[ i ]     = point.x;
+                  data[ i + 1 ] = point.y;
+                  data[ i + 2 ] = point.z;
+
+                 data[i] = Math.sin((i/data.length)*Math.PI) ;
+                  data[i+1]= Math.cos((i/data.length)*Math.PI) ;
+
+                  data[i+2]= Math.tan((i/data.length)*Math.PI) ;
+
+                  //data[i+3]=0;
+                 // data[ i ]     =  ( Math.random() - .5 )*100;
+                 // data[ i + 1 ] =  ( Math.random() - .5 )*100;
+                 // data[ i + 2 ] =  ( Math.random() - .5 )*100;
+
+              }
+
+
+              var positionsTexture = new THREE.DataTexture( data, width, height, THREE.RGBFormat, THREE.FloatType );
+              positionsTexture.minFilter = THREE.NearestFilter;
+              positionsTexture.magFilter = THREE.NearestFilter;
+              positionsTexture.generateMipmaps = false;
+              positionsTexture.needsUpdate = true;
+
+              var originsTexture = new THREE.DataTexture( data, width, height, THREE.RGBFormat, THREE.FloatType );
+              originsTexture.minFilter = THREE.NearestFilter;
+              originsTexture.magFilter = THREE.NearestFilter;
+              originsTexture.generateMipmaps = false;
+              originsTexture.needsUpdate = true;
+
+              // zz85 - fbo init
+
+              rtTexturePos = new THREE.WebGLRenderTarget( width, height, {
+                  minFilter: THREE.NearestFilter,
+                  magFilter: THREE.NearestFilter,
+                  format: THREE.RGBAFormat,
+                  type:THREE.FloatType,
+                  stencilBuffer: false
+              });
+
+              rtTexturePos2 = rtTexturePos.clone();
+
+
+              simulationShader = new THREE.ShaderMaterial({
+
+                uniforms: {
+                  tPositions: { type: "t", value: positionsTexture },
+                  tOrigins: { type: "t", value: originsTexture },
+                  
+                  innerRadius:  { type: "f", value: 10 },
+                  outerRadius:  { type: "f", value: 20 },
+
+                  fingerPos:    { type: "v3" , value: new THREE.Vector3() },
+                },
+
+                vertexShader: document.getElementById('vs-simulation').textContent,
+                fragmentShader:  document.getElementById('fs-simulation').textContent
+
+              });
+
+              fboParticles = new THREE.FBOUtils( width, renderer, simulationShader );
+              fboParticles.renderToTexture( rtTexturePos, rtTexturePos2 );
+
+              fboParticles.in = rtTexturePos;
+              fboParticles.out = rtTexturePos2;
+
+              var  geometry = new THREE.Geometry();
+
+              for ( var i = 0, l = width * height; i < l; i ++ ) {
+
+                var vertex = new THREE.Vector3();
+                vertex.x = ( i % width ) / width ;
+                vertex.y = Math.floor( i / width ) / height;
+                geometry.vertices.push( vertex );
+
+              }
+
+              particleMaterial = new THREE.ShaderMaterial( {
+
+                uniforms: {
+
+                    "map": { type: "t", value: rtTexturePos },
+                    "width": { type: "f", value: width },
+                    "height": { type: "f", value: height },
+
+                    "pointColor": { type: "v3", value: new THREE.Vector3( 0.1, 0.25, 0.5 ) }
+
+                },
+                vertexShader: document.getElementById( 'vs-particles' ).textContent,
+                fragmentShader: document.getElementById( 'fs-particles' ).textContent,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                // depthTest: false,
+                transparent: true
+
+              } );
+
+              mesh = new THREE.ParticleSystem( geometry, particleMaterial );
+              scene.add( mesh );
+
+
+              
+              composer = new WAGNER.Composer( renderer );
+              composer.setSize( 2*window.innerWidth, 2*window.innerHeight ); // or whatever resolution
+
+              zoomBlurPass = new WAGNER.ZoomBlurPass();
+              multiPassBloomPass = new WAGNER.MultiPassBloomPass();
+
+              renderer.autoClearColor = true;
+              window.addEventListener( 'resize', onWindowResize, false );
+
+             
+              animate();
+    
+
+            }
+
+            
+            function onWindowResize() {
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+			}
+
+			function animate() {
+
+              requestAnimationFrame( animate );
+
+
+              if( frame ){
+
+                if( frame.fingers[0] ){
+                  
+                  var p = leapToScene( frame , frame.fingers[0].tipPosition , 100 , 150 );
+
+                  m = new THREE.Matrix4();
+
+                  m.extractRotation( camera.matrixWorld );
+                  p.applyMatrix4( camera.matrixWorld );
+                  simulationShader.uniforms.fingerPos.value = p;
+                  
+                }else{
+                  simulationShader.uniforms.fingerPos.value.x = 100000;
+                }
+                
+
+
+              }
+
+			  render();
+
+			}
+
+			function render() {
+
+                controls.update();
+			
+				// swap
+				var tmp = fboParticles.in;
+				fboParticles.in = fboParticles.out;
+                fboParticles.out = tmp;
+
+				simulationShader.uniforms.tPositions.value = fboParticles.in;
+				fboParticles.simulate( fboParticles.out );
+
+				particleMaterial.uniforms.map.value = fboParticles.in;
+
+                composer.reset();
+              composer.render( scene, camera );
+              composer.pass( multiPassBloomPass );
+              composer.pass( zoomBlurPass );
+              composer.toScreen();
+
+				//renderer.render( scene, camera );
+              }
+
+            function leapToScene( frame , position , size , offset ){
+
+              var x = position[0] - frame.interactionBox.center[0];
+              var y = position[1] - frame.interactionBox.center[1];
+              var z = position[2] - frame.interactionBox.center[2] - offset;
+                
+              x /= frame.interactionBox.size[0];
+              y /= frame.interactionBox.size[1];
+              z /= frame.interactionBox.size[2];
+              
+              x *= size;
+              y *= size;
+              z *= size;
+
+              return new THREE.Vector3( x , y , z );
+
+            }
+
+	
+		</script>
+	</body>
+</html>

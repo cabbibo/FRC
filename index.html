@@ -1,0 +1,305 @@
+<!--
+
+Credit beyond Credit goes to Jaume Sanchez , @thespite
+
+Its a probably to even all any of these my own works, because they were put together very quickly, 
+and any part of the beauty the is legitimate comes from his work.
+
+So Check it out!
+
+
+-->
+
+
+<html>
+
+<head>
+    <link rel="stylesheet" type="text/css" href="lib/main.css"/>
+
+    <link href="favicon.ico" rel="icon" type="image/x-icon" />
+<style>
+  body{
+    margin:0px;
+
+  }
+</style>
+</head>
+
+<body>
+
+<div id ="curtain"></div>
+<script src="lib/leap.js"></script>
+<script src="lib/jquery.min.js"></script>
+<script src="lib/three.min.js"></script>
+<script src="lib/TextCreator.js"></script>
+<script src="lib/Link.js"></script>
+<script src="lib/Light.js"></script>
+<script>
+
+  var linkTitles  = [ "Flow" ,  "Rays", "Cave" ];
+  var lightColors = [ 0xEBC137 , 0xE38C2D , 0xDB4C2C , 0x771E10 , 0x48110C,  0xEBC137 , 0xE38C2D , 0xDB4C2C , 0x771E10 , 0x48110C   ];
+
+  var links = [];
+  var camera, renderer, scene , controls ,stats;
+
+  var lights = [];
+
+  var curtain = $("#curtain");
+
+  var controller , frame , oFrame;
+
+  var transitioning = false;
+
+  var target = new THREE.Object3D();
+  var targetMarker;
+  var bumpMap, normalMap;
+
+  var moonTexture = THREE.ImageUtils.loadTexture( "lib/moon_1024.jpg" );
+  var lavaTexture = THREE.ImageUtils.loadTexture( "lib/lavatile.jpg" );
+
+  var SCENESIZE = SS = 100;
+
+  var staticLength = SCENESIZE / 10;
+  
+  var textCreator = new TextCreator( 100 );
+
+  init();
+
+
+  function init(){
+
+    controller = new Leap.Controller();
+    controller.connect();
+    var w = window.innerWidth;
+    var h = window.innerHeight;
+
+    camera = new THREE.PerspectiveCamera( 65 , w/h , 1 , 1000 );
+    camera.position.z = 100;
+            
+    scene = new THREE.Scene();
+    
+    for( var i = 0; i < linkTitles.length; i++ ){
+
+      var l = new Link( linkTitles[i] , lavaTexture );
+      links.push( l );
+
+      console.log( l );
+
+      l.addToScene();
+      l.scene.position.x = (((i+.5)/ linkTitles.length )-.5) * SCENESIZE;
+
+    }
+
+    for( var i = 0; i < lightColors.length; i++ ){
+
+      var l = new Light( lightColors[i] , moonTexture );
+      lights.push( l );
+      l.addToScene();
+      l.scene.position.x = (((i+.5)/ linkTitles.length )-.5) * SCENESIZE;
+      l.scene.position.y = SCENESIZE / 3;
+    }
+
+    var directionTex = textCreator.createTexture( 'Hover and Pinch to Explore' );
+    var directionMat =  new THREE.MeshPhongMaterial({
+      map:  directionTex,
+      bumpMap: lavaTexture,
+      bumpScale: 1,
+      shininess: 15,
+      metal: true,
+      color:0x333333,
+      ambient:0x333333,
+      transparent: true
+    });
+    var directions = new THREE.Mesh(
+      new THREE.PlaneGeometry(5 ,5 ),
+      directionMat
+    );
+
+    directions.scale.x = directionTex.scaledWidth;
+    directions.scale.y = directionTex.scaledHeight;
+    directions.position.y = 30;
+    scene.add( directions ); 
+    
+    scene.add( target );
+
+
+    renderer = new THREE.WebGLRenderer();
+    renderer.setSize( window.innerWidth, window.innerHeight );
+
+    document.body.appendChild( renderer.domElement );
+    window.addEventListener( 'resize', onResize , false );
+
+    curtain.fadeOut( 1000 );
+    animate();
+
+  }
+
+  function animate(){
+
+    updateLeap();
+    updateLights();
+    requestAnimationFrame( animate );
+    renderer.render( scene , camera );
+
+  }
+
+  function onResize() {
+    windowHalfX = window.innerWidth / 2;
+    windowHalfY = window.innerHeight / 2;
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  function leapToScene( position , frame , size ){
+
+    var p = frame.interactionBox.normalizePoint( position );
+    
+    var x = (p[0]-.5) * size;
+    var y = (p[1]-.5) * size;
+    var z = (p[2]-.5) * size;
+      
+    return new THREE.Vector3( x , y , z );
+
+  }
+
+  function updateLeap(){
+
+
+    oFrame = frame;
+    frame = controller.frame();
+    var f = frame;
+    var oF = oFrame;
+
+    if( f.hands[0] ){
+    
+      target.position = leapToScene( f.hands[0].palmPosition , f , SCENESIZE );
+
+    }else{
+      target.position.set ( 0 , -30 , 10 );
+    }
+
+    var pinchTrigger = false;
+  
+
+    if( !transitioning ){
+      if( f.hands[0] && oF.hands[0] ){
+
+        var p = f.hands[0].pinchStrength;
+        var oP = oF.hands[0].pinchStrength
+
+        if( p > .5 && oP <= .5 ){
+          pinchTrigger = true;
+        }
+
+      }
+
+      for( var i = 0; i < links.length; i++ ){
+
+        var link = links[i];
+        var dif = target.position.clone().sub( link.scene.position );
+     
+        link.distanceMesh.material.opacity = 20 / dif.length();
+        if( dif.length() < 15. ){
+
+          if( pinchTrigger ){
+
+            link.activate();
+            transitioning = true;
+
+          }
+          if( !link.hovered ){
+            link.hoverOver();
+          }
+
+        }else{
+
+          if( link.hovered ){
+            link.hoverOut();
+          }
+
+        }
+
+
+      }
+    
+    }else{
+
+      for( var i = 0; i < links.length; i++ ){
+        var link = links[i];
+
+        var dif = link.scene.position.clone().sub( camera.position );
+
+        if( link == SELECTED_LINK ){
+          
+          //link.scene.position.z += .5;
+
+          var dif = link.scene.position.clone().sub( camera.position );
+
+          link.scene.position.sub( dif.clone().multiplyScalar( .02 ) );
+          if( dif.length() < 10 ){
+
+            var newLocation = link.title+"/";
+
+            curtain.fadeIn( 3000, function(){
+              console.log('hello' );
+              window.location = newLocation;
+            });
+
+          }
+
+        }else{
+        
+          link.scene.position.add( dif.clone().multiplyScalar( .02 ) );
+
+
+        }
+      }
+
+
+    }
+
+
+  }
+
+  function updateLights(){
+
+    for( var i = 0; i < lights.length; i++ ){
+
+      var l = lights[i];
+      var p = lights[i].position;
+      var v = lights[i].velocity;
+
+      var f = new THREE.Vector3();
+
+      var d = p.clone().sub( target.position )
+      f.sub( d.multiplyScalar( .01 ) );
+
+      for( var  j = 0; j < lights.length; j++ ){
+
+
+        var l1 = lights[j];
+        var d = p.clone().sub( l1.position );
+        var length = d.length();
+
+        var dif = length - staticLength;
+
+
+        f.sub( d.normalize().multiplyScalar( .001 * dif ) );
+
+
+      }
+
+      v.add( f.multiplyScalar( l.mass ) );
+      p.add( v );
+      //console.log(  );
+      v.multiplyScalar(l.dampening )
+    }
+
+
+  }
+
+
+</script>
+</body>
+</html>
