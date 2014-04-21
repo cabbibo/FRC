@@ -28,6 +28,7 @@ So Check it out!
 <body>
 
 <div id ="curtain"></div>
+<div id ="curtainIn"></div>
 <script src="lib/leap.js"></script>
 <script src="lib/jquery.min.js"></script>
 <script src="lib/three.min.js"></script>
@@ -45,6 +46,7 @@ So Check it out!
   var lights = [];
 
   var curtain = $("#curtain");
+  var curtainIn = $("#curtainIn");
 
   var controller , frame , oFrame;
 
@@ -125,11 +127,14 @@ So Check it out!
 
     renderer = new THREE.WebGLRenderer();
     renderer.setSize( window.innerWidth, window.innerHeight );
-
+  
+    renderer.domElement.style.position='absolute';
+    renderer.domElement.style.top='0px';
+    renderer.domElement.style.left='0px';
     document.body.appendChild( renderer.domElement );
     window.addEventListener( 'resize', onResize , false );
 
-    curtain.fadeOut( 1000 );
+    curtain.fadeOut( 2000 );
     animate();
 
   }
@@ -299,6 +304,18 @@ So Check it out!
 
   }
 
+  
+  function fadeIn( id , time  ){
+
+    document.getElementById(id).style.display = 'block';
+    document.getElementById(id).style.opacity = 0.0;
+    var jqSelect="#"+id;
+    var ele = $(jqSelect);
+    ele.fadeIn( time );
+
+    fadeStep();
+
+  }
 
 </script>
 </body>

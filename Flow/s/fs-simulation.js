@@ -403,9 +403,6 @@ void main(){
   vel *= .9;
 
 
-
-    
-
   vec3 curl = curlNoise( pos.xyz * .0005 );
   //vec3 v      = pos.xyz - oPos.xyz;
 

@@ -48,6 +48,7 @@
 <script src="lib/leap.js"></script>
 
 <script src="lib/TrackballControls.js"></script>
+<script src="lib/LeapTrackballControls.js"></script>
 <script src="lib/MouseMoveControls.js"></script>
 
 <script src="lib/OBJLoader.js" ></script>
@@ -149,14 +150,10 @@ but short lines are of paramoun importance to me ;)
         camera = new THREE.PerspectiveCamera( 65 , w/h , 1 , 30000 );
         camera.position.z = 4000;
 
-        controls = new THREE.TrackballControls( camera );
-        controls.rotateSpeed = 1;
-        controls.minDistance = 50;
-        controls.maxDistance = 10000;
-        controls.dynamicDampingFactor = .1;
-        controls.noPan = true;
-
-
+        controls = new THREE.LeapTrackballControls( camera , controller );
+        controls.minZoom = 3999;
+        controls.maxZoom = 4001;
+        controls.zoomCutoff = 1.5;
 
 
         scene = new THREE.Scene();
@@ -183,7 +180,7 @@ but short lines are of paramoun importance to me ;)
         var sphereTexCreator = new GeoPosTexture( geo );
 
         var mat = new THREE.MeshBasicMaterial({color:0x000000})
-
+        //var mat = new THREE.MeshNormalMaterial()
         for( var i = 0; i < 20; i++ ){
 
           var mesh = new THREE.Mesh( geo , mat );
@@ -231,6 +228,7 @@ but short lines are of paramoun importance to me ;)
           t_pos:{type:"t",value:physicsRenderer.output},
           t_oPos:{type:"t",value:physicsRenderer.oOutput},
           t_ooPpos:{type:"t",value:physicsRenderer.ooOutput},
+          t_toGeo:{type:"t",value:logoTexture},
           size:{type:"f",value:size},
           sprite:{type:"t",value:sprite}
         }
@@ -338,8 +336,13 @@ but short lines are of paramoun importance to me ;)
         x *= size;
         y *= size;
         z *= size;
+        z -= 2*size;
 
-        return new THREE.Vector3( x , y , z );
+
+        var position = new THREE.Vector3( x , y , z );
+        position.applyMatrix4( camera.matrix );
+
+        return position;
 
       }
 
@@ -363,7 +366,23 @@ but short lines are of paramoun importance to me ;)
           }else{
 
             var p =  fingerJoints[index].position;
-            point = p.clone().sub( p.clone().multiplyScalar( .05 ));
+
+
+            var angle = (index / 20 ) * 2*Math.PI;
+
+            var radius = 1500;
+
+            var x = Math.cos( angle ) * radius;
+            var y = Math.sin( angle ) * radius;
+
+            var toPos = new THREE.Vector3( x , y ,0);
+            //toPos.applyMatrix4( camera.matrix );
+           
+            ///toPos.sub( camera.position.clone().normalize().multiplyScalar( -1000 ));
+            
+            var dif = toPos.clone().sub( p );
+
+            point = p.clone().add( dif.multiplyScalar( .05 ));
 
 
           }

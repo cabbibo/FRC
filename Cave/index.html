@@ -4,8 +4,8 @@
 		<meta charset="utf-8">
 		<title>Bumpy Metaballs</title>
         <style>
-          body{margin:0px;overflow:hidden;}
-          #container:{ position:absolute; left:0px; top:0px; padding:0px; margin:0px; }
+          body{margin:0px;overflow:hidden;background:black}
+          #container:{ position:absolute; left:0px; top:0px; padding:0px; margin:0px;background:black }
         </style>
 	</head>
 	<body>
@@ -155,8 +155,9 @@ void main() {
         base += vec3( nn );
 
         vec3 dif = vPosition.xyz - handPos;
+        vec3 c = min( 4.0 , .4 / length( dif )) * vec3( .1 , .0 , .4 );
 
-        gl_FragColor = vec4( base.gbr + abs(dif)*.1 ,  .1 );
+        gl_FragColor = vec4( base.gbr + c ,  .1 );
 
 
     }
@@ -412,19 +413,30 @@ function updateBlobs(){
         var pos = f.interactionBox.normalizePoint( j );
         material.uniforms.handPos.value.fromArray( pos );
         var half = new THREE.Vector3( .5 , .5 , .5 );
-        var p= new THREE.Vector3();
+        var p = new THREE.Vector3();
 
-        var sP = p.fromArray( pos ).sub(half).multiplyScalar( .4 )
+         material.uniforms.handPos.value.fromArray( pos ).sub( half );
+        var sP = p.fromArray( pos ).sub(half).multiplyScalar( .4 );
+//material.uniforms.handPos.value = sP;
+
         sP.add( half );
 
         p = sP;
-
+        
       }
 
         
       //console.log( p );
       BLOBS[i].position = p;
       BLOBS[i].dFromEdge = .03;
+
+    }
+
+    if( f.hands[0] ){
+
+      var pos = f.interactionBox.normalizePoint( f.hands[0].palmPosition );
+      var half = new THREE.Vector3( .5 , .5 , .5 );
+      material.uniforms.handPos.value.fromArray( pos ).sub( half );
 
     }
 

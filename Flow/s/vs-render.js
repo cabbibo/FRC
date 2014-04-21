@@ -1,6 +1,7 @@
 uniform sampler2D t_pos;
 uniform sampler2D t_oPos;
 uniform sampler2D t_ooPos;
+uniform sampler2D t_toGeo;
 uniform float size;
 
 /*uniform float particleSize;
@@ -21,6 +22,8 @@ varying vec2 vUv;
 varying vec3 vPos;
 varying vec3 vVel;
 varying float life;
+varying vec3 distance;
+
 /*varying vec4 vAudio;
 varying vec4 vPosition;
 varying float vNoise;
@@ -34,10 +37,12 @@ void main() {
     life = pos.w;
 
     vec4 oPos = texture2D( t_oPos , uv );
+    vec4 toGeo = texture2D( t_toGeo , uv );
     vec3 dif = pos.xyz - oPos.xyz;
     vPos = pos.xyz;
     vVel = dif;
 
+    distance = pos.xyz - toGeo.xyz;
 
     vec4 mvPos = modelViewMatrix * vec4( pos.xyz , 1.0 );
     gl_PointSize = min( 10.0, 10.0 * 1000. / length( mvPos ));
