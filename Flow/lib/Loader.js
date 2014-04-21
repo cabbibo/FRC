@@ -55,7 +55,7 @@ function Loader(  params ){
 
     }
 
-    this.addStartButton();
+    //this.addStartButton();
 
     // Conditions are things that will check each time something 
     // new is loaded, allowing us to start putting together certain parts
