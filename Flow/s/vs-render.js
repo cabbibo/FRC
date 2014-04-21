@@ -23,6 +23,7 @@ varying vec3 vPos;
 varying vec3 vVel;
 varying float life;
 varying vec3 distance;
+varying float id;
 
 /*varying vec4 vAudio;
 varying vec4 vPosition;
@@ -31,6 +32,7 @@ uniform sampler2D audio;*/
 
 void main() {
 
+    id = position.z;
     vec2 uv = position.xy + vec2( 0.5 / size, 0.5 / size );
     vUv = uv;
     vec4 pos = texture2D( t_pos , uv );
@@ -45,7 +47,8 @@ void main() {
     distance = pos.xyz - toGeo.xyz;
 
     vec4 mvPos = modelViewMatrix * vec4( pos.xyz , 1.0 );
-    gl_PointSize = min( 10.0, 10.0 * 1000. / length( mvPos ));
+    //gl_PointSize = min( 1.0, 10.0 * 1000. / length( mvPos ));
+    gl_PointSize = 1.0;
     gl_Position = projectionMatrix * mvPos;
 }
 
